@@ -1,0 +1,18 @@
+---------------------------- RecursiveTask类Javadoc文档翻译
+
+一个递归的、结果轴承的ForkJoinTask。
+一个经典案例, 下面是一个计算斐波那契数字的任务:
+ class Fibonacci extends RecursiveTask<Integer> {
+   final int n;
+   Fibonacci(int n) { this.n = n; }
+   Integer compute() {
+     if (n <= 1)
+       return n;
+     Fibonacci f1 = new Fibonacci(n - 1);
+     f1.fork();
+     Fibonacci f2 = new Fibonacci(n - 2);
+     return f2.compute() + f1.join();
+   }
+ }
+
+然而, 除了作为一种计算斐波那契函数的愚蠢方法之外(你可以在实践中, 使有一种简单快速的线性算法)之外, 这种方法性能很差, 因为最小的子任务太小不值得拆分。相反, 就像几乎所有的fork/join应用程序一样, 你可以选择一些最小粒度大小(例如这里的10), 总是有序处理而不是细分处理这些粒度。

@@ -1,0 +1,9 @@
+---------------------------- ThreadLocalRandom类Javadoc文档翻译
+
+与当前线程隔离的随机数生成器。像Math类使用的全局的Random生成器一样, ThreadLocalRandom使用内部生成的种子进行初始化, 这个种子无法被修改。在适当的情况下, 在并发程序中使用ThreadLocalRandom而不是共享的Random对象通常会遇到更少的开销和竞争。当多个任务(例如, 每个ForkJoinTask)在线程池中并行使用随机数时, 使用ThreadLocalRandom会特别合适。
+
+这个类的用法通常按这样的格式: ThreadLocalRandom.current().nextX(...) (这个的X可以是Int, Long, 等等)。当所有用法都是这种格式的, 那么在多个线程之间绝不可能不小心共享ThreadLocalRandom。
+
+该类还提供了其他常用的绑定的随机生成方法。
+
+ThreadLocalRandom实例不是加密安全的。在安全敏感的应用中, 考虑使用java.security.SecureRandom替换。另外, 默认的构造实例不会使用一个加密的随机种子, 除非系统属性java.util.secureRandomSeed被设为真。

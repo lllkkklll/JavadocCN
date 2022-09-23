@@ -1,0 +1,89 @@
+---------------------------- ThreadPoolExecutor类Javadoc文档翻译
+
+ExecutorService使用可能的几个池内线程中的一个, 执行每一个提交任务, 通常使用Executors的工厂方法配置。
+
+线程池解决了两个不同的问题: 当执行大量异步任务时, 由于减少了每个任务的调用开销, 它们通常提供优越表现; 并且它们提供了一种绑定和管理在执行任务集合时消耗的资源(包含线程)的方法。每个ThreadPoolExecutor还都会维护一些基本的统计信息, 例如完成的任务数量。
+
+为了在广泛的上下文中使用, 这个类提供了许多可调节的参数和可扩展的挂钩。但是, 建议程序员使用更便捷的Executors工厂方法Executors.newCachedThreadPool(无界的线程池, 自动的线程回收), Executors.newFixedThreadPool(固定数量的线程池)和Executors.newSingleThreadExecutor(单一的后台线程), 那个预配置为大多数常规使用的场景设置。否则, 当手动配置时, 使用下述指南, 并且调优这个类:
+  1、核心和最大的池数量
+  ThreadPoolExecutor将根据corePoolSize(查看getCorePoolSize方法)和maximumPoolSize(查看getMaximumPoolSize方法)设置的界限, 自动调整池的数量(翻阅getPoolSize方法)。
+  当使用方法execute(Runnable)提交一个新任务时, 并且少于corePoolSize的线程是运行的, 那么会创建一个新的线程来处理请求, 即使其他worker线程是空闲的。如果有超过corePoolSize但少于maximumPoolSize线程运行, 只有队列满了才会创建新的线程。通过将corePoolSize和maximumPoolSize设为相同值, 创建一个固定数量的线程池。通过将maximumPoolSize设置为一个本质上的无界值(如: Integer.MAX_VALUE), 允许池接受任意数量的并发任务。最典型地, 只在构造方法上设置池的核心和最大数量, 但也可以使用setCorePoolSize和setMaximumPoolSize动态修改。
+
+  2、按需构造
+  默认情况下, 即使核心线程只有当新任务到达时才会初始化和启动, 但可以使用prestartCoreThread或prestartAllCoreThreads方法来动态覆盖。如果使用一个非空队列构建池子, 可能想要预先启动线程。
+
+  3、创建新的线程
+  使用ThreadFactory创建新的线程。如果没有指定, 那么会使用Executors.defaultThreadFactory来创建所有线程, 这些线程在相同的ThreadGroup、具有相同的NORM_PRIORITY优先级和非守护线程状态。通过提供不同的ThreadFactory, 你可以更改线程的名称、线程组、优先级、守护进程状态等等。如果ThreadFactory创建线程失败(通过从newThread中返回null), 那么executor将继续, 但有可能无法执行任何任务。线程应该拥有"modifyThread"运行权限。如果使用池的worker线程或者其他线程不具有此权限, 那么服务可能降级: 配置改变不会及时生效, 并且关闭池可能会处于可以终止但尚未完成的状态。
+
+  4、存活时间
+  如果池子当前有超过corePoolSize的线程, 如果多余的线程空闲时间超过keepAliveTime, 那么它们就会终止(翻阅getKeepAliveTime(TimeUnit))。当池子没有活跃使用时, 这提供了一个减少资源损耗的方法。如果后面池变得更加活跃了, 那么将会构建新的线程。这个参数可以使用setKeepAliveTime(long, TimeUnit)方法动态改变。使用值Long.MAX_VALUE TimeUnit.NANOSECONDS可以有效地禁止空闲线程在关闭前终止。默认情况下, 存活策略当且仅当超过了corePoolSize线程时应用。但是,allowCoreThreadTimeOut(boolean)方法也能用来将此超时策略应用于核心线程, 只要keepAliveTime值不为零。
+
+  5、排队
+  任意BlockingQueue可以用于转移和持有提交的线程。这个队列的使用与池大小交互:
+    1. 如果少于corePoolSize的线程正在运行, 那么Executor总是会增加一个新的线程, 而不是排入队列。
+    2. 如果corePoolSize数量或更多的数量的线程正在运行, 那么Executor总是会将请求排入队列, 而不是增加一个新的线程。
+    3. 如果请求无法排入队列, 那么就会创建一个新的线程, 除非这会超过maximumPoolSize, 这样的任务将被拒绝。
+  
+  对于队列, 有三个一般策略:
+    1. 直接传递。工作队列的一个好的默认选择是SynchronousQueue, 它将任务传递给线程而不是持有任务。这儿, 如果没有线程立马可用来执行任务, 那么尝试排列任务将会失败, 因此将会构建新的线程。当处理一组可能有内部依赖的请求时, 这个策略避免查找。直接传递通常需要无界的maximumPoolSizes, 来避免拒绝新的提交任务。当命令持续到达且到达的平均速率高于处理速率时, 这反过来又允许了线程无限增长的可能性。
+    2. 无界队列。当所有corePoolSize线程忙碌时, 使用无界队列(例如: 没有预定义容量的LinkedBlockingQueue)将会导致新的任务在队列中等待。因此, 不会创建超过corePoolSize数量的线程。(并且maximumPoolSize值因此不会有任何作用。) 当每个任务完全依赖彼此时, 这可能是合适的, 因此任务不会影响其他任务执行; 例如, 在网页服务中。虽然这种类型的排队在平滑短暂的请求爆发方面很有用, 但当命令到达的平均速度持续快于它们的处理速度时, 它允许work队列无限增长的可能性。
+    3. 有界队列。当使用有限的maximumPoolSizes时, 一个有界队列(如: ArrayBlockingQueue)有助于防止资源耗尽, 但调优和控制变得更困难。Queue的数量和最大池的数量彼此替代: 使用大队列和小池子会最小化CPU用量、系统资源和上下文切换负载, 但可能会导致人为的低吞吐量。如果任务频繁堵塞(例如: 它们受到I/O限制), 系统可能会出现超过你允许的线程调度时间。使用小队列通常需要更大的池的数量, 这会使得CPU更繁忙但会遇到不可接受的调度开销, 也会减少吞吐量。
+
+  6、拒绝的任务
+  当Executor已经关闭, 或者Executor同时使用有限的最大线程和工作队列容量且达到饱和时, 使用execute(Runnable)方法提交的新任务将被拒绝。其他例子中, execute方法调用RejectedExecutionHandler本身的RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)方法。提供了四个预先定义的处理策略:
+    1. 默认的ThreadPoolExecutor.AbortPolicy, 一旦拒绝, 处理器抛出一个RejectedExecutionException。
+    2. ThreadPoolExecutor.CallerRunsPolicy, 调用execute的线程自己运行任务。这提供了一个简单的反馈控制机制, 这个机制减慢了新任务提交的速率。
+    3. ThreadPoolExecutor.DiscardPolicy, 不能执行的任务被简单丢弃。
+    4. ThreadPoolExecutor.DiscardOldestPolicy, 如果executor没有关闭, 那么工作队列头部的任务被丢弃, 然后重新尝试执行(可能会再次失败, 导致重复操作。)
+
+  定义和使用其他类型的RejectedExecutionHandler类是有有可能的。当策略用来只在特定容量或排队策略下工作时, 这样做需要一些特殊注意。
+
+  7、钩子方法
+  这个类提供了受保护的、可重写的方法beforeExecute(Thread, Runnable)和afterExecute(Runnable, Throwable), 它们在每个任务执行前和执行后调用。它们可以用来操作执行环境; 例如, 重新初始化ThreadLocal、收集统计信息或添加日志条目。此外, terminated方法可以被覆盖, 以便在Executor完全终止后执行需要执行的任意特殊处理。
+  如果钩子或回调方法抛出异常, 那么内部的worker线程可能会失败并突然终止。
+ 
+  8、队列维护
+  getQueue()方法允许获取work队列, 为了监控和调试队列。为了其他目的调用这个方法会很气馁。当大量队列任务取消时, 提供的两个方法remove(Runnable)和purge能够有助于存储回收。
+
+  9、最后
+  程序中不再引用, 且没有剩余线程的池将被自动关闭。如果你想确保不被引用的池会被回收, 即使用户忘记调用shutdown, 那么你必须通过设置合适的存活时间、使用0个核心线程下限 且/或 设置allowCoreThreadTimeOut(boolean), 来安排未使用的线程最终都会死亡。
+
+扩展案例。这个类的大多数扩展, 复写一个或更多的受保护的钩子方法。例如, 下面有一个子类, 增加了简单的暂停/恢复功能:
+ class PausableThreadPoolExecutor extends ThreadPoolExecutor {
+   private boolean isPaused;
+   private ReentrantLock pauseLock = new ReentrantLock();
+   private Condition unpaused = pauseLock.newCondition();
+
+   public PausableThreadPoolExecutor(...) { super(...); }
+
+   protected void beforeExecute(Thread t, Runnable r) {
+     super.beforeExecute(t, r);
+     pauseLock.lock();
+     try {
+       while (isPaused) unpaused.await();
+     } catch (InterruptedException ie) {
+       t.interrupt();
+     } finally {
+       pauseLock.unlock();
+     }
+   }
+
+   public void pause() {
+     pauseLock.lock();
+     try {
+       isPaused = true;
+     } finally {
+       pauseLock.unlock();
+     }
+   }
+
+   public void resume() {
+     pauseLock.lock();
+     try {
+       isPaused = false;
+       unpaused.signalAll();
+     } finally {
+       pauseLock.unlock();
+     }
+   }
+ }

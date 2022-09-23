@@ -1,0 +1,73 @@
+---------------------------------- CyclicBarrier类中文翻译
+
+同步援助, 它允许一组线程到达一个公共屏障点相互等待。CyclicBarrier在固定数量线程的程序中很有用, 并且这些线程必须偶尔互相等待。屏障点之所以称为循环的, 是因为在等待线程被释放后它可以重新使用。
+
+CyclicBarrier支持一个可选的Runnable命令, 这个命令在每个屏障点运行一次, 在组中的最后一个线程到达之后, 但在释放任何线程释放之前。这个屏障动作对于在任何一方继续之前更新共享状态, 是非常有用的。
+
+示例使用: 下面是一个在并行分解设计模式中, 使用屏障的例子:
+  
+ class Solver {
+   final int N;
+   final float[][] data;
+   final CyclicBarrier barrier;
+
+   class Worker implements Runnable {
+     int myRow;
+     Worker(int row) { myRow = row; }
+     public void run() {
+       while (!done()) {
+         processRow(myRow);
+
+         try {
+           barrier.await();
+         } catch (InterruptedException ex) {
+           return;
+         } catch (BrokenBarrierException ex) {
+           return;
+         }
+       }
+     }
+   }
+
+   public Solver(float[][] matrix) {
+     data = matrix;
+     N = matrix.length;
+     Runnable barrierAction =
+       new Runnable() { public void run() { mergeRows(...); }};
+     barrier = new CyclicBarrier(N, barrierAction);
+
+     List<Thread> threads = new ArrayList<Thread>(N);
+     for (int i = 0; i < N; i++) {
+       Thread thread = new Thread(new Worker(i));
+       threads.add(thread);
+       thread.start();
+     }
+
+     // wait until done
+     for (Thread thread : threads)
+       thread.join();
+   }
+ }
+
+在这里, 每个工作线程处理矩阵中的一行, 然后在屏障处等待, 直到所有行处理结束。当处理完所有行时, 将会执行提供的Runnable屏障动作并且合并所有行。如果合并确定已找到解决方案, 那么done()将会返回true, 并且每个worker将会终止。
+
+如果屏障动作执行时, 不依赖于暂停的部分, 那么当它被释放时, 该部分中的所有线程都可以执行这个动作。为了实现这, 每次调用await都会返回该线程在屏障中的到达下标。你可以选择哪一个线程应该执行屏障动作, 例如:
+ 
+ if (barrier.await() == 0) {
+   // log the completion of this iteration
+ }
+
+对于失败的同步尝试, CyclicBarrier使用全或无的中断模型: 如果一个线程因为中断、失败或超时而提前离开一个障碍点, 在该障碍点等待的所有其他线程也将通过BrokenBarrierException(或InterruptedException，如果它们也几乎同时被中断)异常离开。
+
+内存一致性影响: 调用await()之前线程中的动作, 发生在屏障动作之前, 发生在其他线程中相应的await()成功返回之后的操作之前。(happen-before原理)
+
+-------------------------------------------------------- Method
+
+屏障每一次使用都会作为一个generation实例。当屏障触发或重置时, generation发生改变。 使用这个屏障的线程可以关联多个generation ---- 由于锁分配给等待线程的方式不确定 ---- 但同一时刻只能有一个是活跃的(用于计数的那个), 并且其余的要么是中断的, 要么是触发的。如果有中断但没有后续重置, 那么就不需要有活跃的generation。
+private static class Generation {
+    boolean broken = false;
+}
+
+
+
+

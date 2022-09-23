@@ -1,0 +1,48 @@
+---------------------------- Thread类Javadoc文档翻译
+线程是程序中的执行线程。Java虚拟机允许应用由多个线程并发执行。
+
+每个线程都有一个优先级。优先级较高的线程, 优先于优先级较低的线程执行。每个线程, 可能会也可能不会, 被标记成守护进程。当运行在某些线程中的代码, 创建一个新的线程对象时, 新线程的优先级最初设为等于创建线程的优先级, 并且只有当创建线程是守护进程时, 新线程才是守护进程。
+
+当Java虚拟机启动时, 通常会有一个单一的非守护进程的线程(通常情况下调用某些指定类的main方法)。Java虚拟机持续执行线程, 直到出现如下情况之一:
+    1、 Runtime类的exit方法被调用, 且安全管理器允许执行退出操作。
+    2、 所有非守护线程已经死亡, 无论是从run方法调用返回, 还是抛出超出run方法传播的异常。
+
+有两种方式创建新的执行线程。一种方式是声明一个Thread类的子类, 这个子类需要覆写Thread类的run方法。子类的实例接下来可以被分配和启动。例如, 计算primes大于启动值的线程可以如下所写: 
+    class PrimeThread extends Thread {
+        long minPrime;
+        PrimeThread(long minPrime) {
+            this.minPrime = minPrime;
+        }
+
+        public void run() {
+            // compute primes larger than minPrime
+            . . .
+        }
+    }
+   
+如下代码将会创建一个线程并开始运行: 
+    PrimeThread p = new PrimeThread(143);
+    p.start();
+   
+另外一种创建线程的方式, 是声明一个实现了Runnable接口的类。接下来那个类会实现run方法。创建线程时, 类的实例可以当做参数被分配、被传递。相同案例在另一种格式中, 看起来如下: 
+ 
+    class PrimeRun implements Runnable {
+        long minPrime;
+        PrimeRun(long minPrime) {
+            this.minPrime = minPrime;
+        }
+
+        public void run() {
+            // compute primes larger than minPrime
+            . . .
+        }
+    }
+   
+ 
+如下代码将会创建一个线程并开始运行: 
+       PrimeRun p = new PrimeRun(143);
+       new Thread(p).start();
+
+每个线程有一个名字用于标识。拥有相同名字的线程可能不止一个。如果线程创建时名字没有指定, 会为它生成一个新的名称。
+
+除非另有说明, 否则传入一个null参数给这个类的构造函数或方法, 将导致抛出NullPointerException。

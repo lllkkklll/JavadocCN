@@ -1,0 +1,101 @@
+---------------------------------- ReentrantReadWriteLock类中文翻译
+
+ReadWriteLock的实现, 支持ReentrantLock相似的语义。
+这个类有如下参数:
+    1. Acquisition order(获取顺序)
+        这个类不会为锁的访问, 强制实施reader或writer的偏好顺序。但是, 它支持一个可选择的公平策略。
+
+        1.2 Non-fair mode (默认)
+            当构造为non-fair(默认)时, 进入读锁和写锁的顺序不是指定的, 受可重入约束管制。一个非公平锁被不断争抢, 可能无限期地推迟一个或多个读写线程, 但通常将会比公平锁拥有更高的吞吐量。
+
+        1.2 Fair mode
+            当构造为fair时, 线程使用大约到达顺序的策略争抢入口。当当前持有的锁被释放, 要么等待时间最长的单个写线程会被分配到写锁, 要么等待时间超过所有等待写线程的读线程组会被分配到读锁。
+            如果写锁被持有, 或者有等待的写锁, 那么尝试获取公平的读锁(非可重入的)的线程将会堵塞。线程无法获取读锁, 直到当前最早等待的读线程获取到写锁并释放之后才能获取。当然, 如果正在等待的写线程放弃等待, 留下一个或多个读线程作为队列中等待时间最长的读线程, 而且写锁是空闲的, 那么这些读线程将会被分配到读锁。
+            线程尝试获取公平的写锁(非可重入的)将会堵塞, 除非读锁和写锁都是自由的(这意味着不会有等待的线程)。(注意, 非阻塞的 ReentrantReadWriteLock.ReadLock.tryLock() 和 ReentrantReadWriteLock.WriteLock.tryLock()方法不会尊重公平设置, 并且如果可能将会立即获取到锁, 不管等待中的线程。)
+
+    2. Reentrancy (可重入)
+        这个锁, 在ReentrantLock风格中, 允许读线程和写线程重新获取读写锁。非可重入的读线程不被允许, 直到所有被写线程持有的写锁全部释放。
+        另外, 一个写线程可以获取读线程, 但反之则不然。在其他应用中, 当对在读锁下执行读操作的方法的调用或回调期间持有写锁时, 可重入性可能是有用的。如果读线程尝试获取写锁, 那么它永远不会成功。
+
+    3. Lock downgrading (锁降级)
+    可重入性也允许将写锁降级为一个读锁, 通过获取写锁, 然后获取读锁, 再然后释放写锁。但是, 将一个读锁升级到写锁是不可能的。
+    
+    4. Interruption of lock acquisition (锁获取的中断)
+    读写锁同时支持在锁获取期间中断。
+
+    5. Condition support (条件支持)
+    写锁提供了一个Condition实现, 行为方式和Codition一样, 关于写锁, 正如ReentrantLock.newCondition为ReentrantLock提供Condition实现。
+    读锁不支持Condition, 而且readLock().newCondition()方法会抛出UnsupportedOperationException。
+
+    6. Instrumentation (仪表)
+    这个类提供了方法来确定锁是否被持有或被争抢。这些方法用来监控系统状态, 而不是用于同步控制。
+
+这个类的同步操作, 和内置的锁表现方式一样: 处于未加锁状态的反序列化锁, 与序列化时的状态无关。
+
+案例。有一个展示在更新缓存后, 如何执行锁降级的代码案例(当非嵌套模式下处理多个锁时, 异常处理尤其棘手):
+  
+ class CachedData {
+   Object data;
+   volatile boolean cacheValid;
+   final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+
+   void processCachedData() {
+     rwl.readLock().lock();
+     if (!cacheValid) {
+       // Must release read lock before acquiring write lock
+       rwl.readLock().unlock();
+       rwl.writeLock().lock();
+       try {
+         // Recheck state because another thread might have
+         // acquired write lock and changed state before we did.
+         if (!cacheValid) {
+           data = ...
+           cacheValid = true;
+         }
+         // Downgrade by acquiring read lock before releasing write lock
+         rwl.readLock().lock();
+       } finally {
+         rwl.writeLock().unlock(); // Unlock write, still hold read
+       }
+     }
+
+     try {
+       use(data);
+     } finally {
+       rwl.readLock().unlock();
+     }
+   }
+ }
+
+在某些类型的集合的某些使用中, ReentrantReadWriteLock可以用来提高并发性。只有当集合会很大、读线程多于写线程访问, 而且需要操作开销超过同步开销时, 才值得这样做。例如, 下面有一个使用了TreeMap的类, 会很大且并发访问。
+
+ class RWDictionary {
+   private final Map<String, Data> m = new TreeMap<String, Data>();
+   private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+   private final Lock r = rwl.readLock();
+   private final Lock w = rwl.writeLock();
+
+   public Data get(String key) {
+     r.lock();
+     try { return m.get(key); }
+     finally { r.unlock(); }
+   }
+   public String[] allKeys() {
+     r.lock();
+     try { return m.keySet().toArray(); }
+     finally { r.unlock(); }
+   }
+   public Data put(String key, Data value) {
+     w.lock();
+     try { return m.put(key, value); }
+     finally { w.unlock(); }
+   }
+   public void clear() {
+     w.lock();
+     try { m.clear(); }
+     finally { w.unlock(); }
+   }
+ }
+Implementation Notes
+This lock supports a maximum of 65535 recursive write locks and 65535 read locks. Attempts to exceed these limits result in Error throws from locking methods.
+

@@ -1,0 +1,129 @@
+---------------------------------- CountDownLatch类中文翻译
+
+同步援助, 允许一个或多个线程等待, 直到其他线程执行完一系列操作结束。
+
+CountDownLatch使用给定的count值进行初始化。await方法会堵塞, 直到当前的count值, 因为调用countDown方法到0为止。在此之后, 所有的等待线程会被释放, 并且后续的任何await调用会立刻返回。这是一个一次性现象 -- count值不能被重置。如果需要可重置count值的版本, 可以考虑使用CyclicBarrier。
+
+CountDownLatch是一个多功能的同步工具, 并且可以用于很多目的。用1初始化的CountDownLatch作为一个简单的on/off闩锁, 或门: 所有调用await的线程都在门处等待, 直到调用了countDown的线程打开门。用N初始化的CountDownLatch可以用来让一个线程等待, 直到N个线程完成了某个动作, 或者某个动作被完成了N次为止。
+
+CountDownLatch的一个有用属性是, 它不需要调用countDown的线程, 在运行前需要等到计数器归零, 它只是阻止任何线程通过await方法, 直到所有的线程可以通过。
+
+示例用法: 这儿有两个类, 在一组worker线程中使用两个countdown latches:
+  1. 第一个, 启动信号, 阻止任何worker执行, 直到为他们准备的driver执行;
+  2. 第二个, 完成信号, 允许driver等待, 直到所有worker完成。
+  
+class Driver { // ...
+  void main() throws InterruptedException {
+    CountDownLatch startSignal = new CountDownLatch(1);
+    CountDownLatch doneSignal = new CountDownLatch(N);
+
+    for (int i = 0; i < N; ++i) // create and start threads
+      new Thread(new Worker(startSignal, doneSignal)).start();
+
+    doSomethingElse();            // don't let run yet
+    startSignal.countDown();      // let all threads proceed
+    doSomethingElse();
+    doneSignal.await();           // wait for all to finish
+  }
+}
+
+class Worker implements Runnable {
+  private final CountDownLatch startSignal;
+  private final CountDownLatch doneSignal;
+  Worker(CountDownLatch startSignal, CountDownLatch doneSignal) {
+    this.startSignal = startSignal;
+    this.doneSignal = doneSignal;
+  }
+  public void run() {
+    try {
+      startSignal.await();
+      doWork();
+      doneSignal.countDown();
+    } catch (InterruptedException ex) {} // return;
+  }
+
+  void doWork() { ... }
+}
+
+另一个经典的使用方式是将一个问题划分成N个部分, 每个部分使用一个Runnable描述, 该Runnable执行该部分, 并在latch上计数, 然后将所有Runnable排列到一个Executor上。当所有子部分完成时, 协调线程可以通过await。(当线程必须重复使用这种方式计数, 使用CyclicBarrier替代。)
+  
+class Driver2 { // ...
+  void main() throws InterruptedException {
+    CountDownLatch doneSignal = new CountDownLatch(N);
+    Executor e = ...
+
+    for (int i = 0; i < N; ++i) // create and start threads
+      e.execute(new WorkerRunnable(doneSignal, i));
+
+    doneSignal.await();           // wait for all to finish
+  }
+}
+
+class WorkerRunnable implements Runnable {
+  private final CountDownLatch doneSignal;
+  private final int i;
+  WorkerRunnable(CountDownLatch doneSignal, int i) {
+    this.doneSignal = doneSignal;
+    this.i = i;
+  }
+  public void run() {
+    try {
+      doWork(i);
+      doneSignal.countDown();
+    } catch (InterruptedException ex) {} // return;
+  }
+
+  void doWork() { ... }
+}
+
+内存一致性影响: 在计数归零之前, 调用countDown()之前的线程操作, 发生在另一个线程中相应的await()成功返回之后的操作之前。(即await方法在countDown方法调用之后运行)
+
+
+
+
+
+----------------------------------------- void await() throws InterruptedException
+导致当前线程一直等待, 直到latch已经减到0为止, 除非线程被通过Thread的interrupt方法中断。
+
+如果当前计数器归零, 那么这个方法会立刻返回(即不再阻塞等待归零)。
+
+如果当前计数器大于零, 那么为了线程调度的目的, 当前线程会不可用, 且会进入睡眠状态, 直到以下两种情况之一发生为止:
+  1、 因为调用countDown方法, 计数器归零;
+  2、 某些其他线程调用了中断了当前线程(调用Thread的interrupt方法)。
+
+如果当前线程:
+  1、 在进入该方法时, 设置了中断状态
+  2、 在等待时, 调用了Thread的interrupt的中断方法
+那么将抛出InterruptedException, 并且当前的中断状态会被清除。
+
+----------------------------------------- boolean await(long timeout, TimeUnit unit) throws InterruptedException 
+导致当前线程一直等待, 直到latch已经减到0为止, 除非线程被通过Thread的interrupt方法中断, 或者指定的等待时间超时。
+
+如果当前计数器归零, 那么这个方法会立刻返回(返回true)。
+
+如果当前计数器大于零, 那么为了线程调度的目的, 当前线程会不可用, 且会进入睡眠状态, 直到以下三种情况之一发生为止:
+  1、 因为调用countDown方法, 计数器归零;
+  2、 其他线程调用了Thread的interrupt方法, 中断了当前线程;
+  3、 指定的等待时间超时。
+
+如果计数器归零, 那么方法会返回值(true)。
+
+如果当前线程: 
+  1、 在进入该方法时, 设置了中断状态
+  2、在等待时, 调用了Thread的interrupt的中断方法
+那么将抛出InterruptedException, 并且当前的中断状态会被清除。
+
+如果指定的时间超时, 那么将返回值(false)。如果时间少于或等于0, 那么方法将不会再等待。
+
+----------------------------------------- void countDown()
+减少门闩的数量, 如果计数归零释放所有的等待线程。
+
+如果当前的计数值大于0, 那么它是递减的。如果新的值是0, 那么为了线程调度的目的, 所有等待线程会重新可用。
+
+如果当前的计数等于0, 将不再发生任何事。
+
+
+----------------------------------------- long getCount()
+返回当前的计数值
+
+这个方法通常用作debug和test的目的

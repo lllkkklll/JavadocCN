@@ -1,0 +1,24 @@
+---------------------------- CompletionService类Javadoc文档翻译
+
+一个服务, 用于将新的异步任务的产生和已完成任务结果消费解耦。生产者提交任务执行, 消费者获取已完成的任务并按照完成的顺序执行结果。例如, CompletionService可以用于管理异步I/O, 某些执行读取的任务, 在程序或系统的一部分中提交; 然后当读取完成时, 在程序另一部分中操作, 可能和请求的顺序不同。
+
+通常来说, CompletionService依赖于单独的Executor来准确得执行任务, 在这种情况下CompletionService只管理了一个外部的完成队列。ExecutorCompletionService类提供了这个方法的实现。
+
+内存一致性影响: 提交任务到CompletionService前的线程动作, 发生在那个任务执行动作之前, 任务动作又发生在相应的take()成功返回之后的动作之前。
+
+********************************** Method *********************************
+
+***************************** Future<V> submit(Callable<V> task);
+提交一个有返回值的任务用于执行, 并且返回关联任务等待结果的Future。一旦完成, 这个任务可以被获取或拉取。
+
+***************************** Future<V> submit(Runnable task, V result);
+提交一个Runnable任务用于执行, 并且返回关联那个任务的Future。一旦完成, 这个任务可以被获取或拉取。
+
+***************************** Future<V> take() throws InterruptedException;
+检索并移除下一个完成任务对应的Future, 如果还没有出现就等待。
+
+***************************** Future<V> poll();
+检索并移除下一个完成任务对应的Future, 如果还没有出现就返回null。
+
+***************************** Future<V> poll(long timeout, TimeUnit unit) throws InterruptedException;
+检索并移除下一个完成任务对应的Future, 如果需要等待指定的等待时间, 如果还没有出现。

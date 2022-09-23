@@ -1,0 +1,64 @@
+---------------------------------- Future类中文翻译
+
+Future表示异步计算的结果。提供了方法来检查计算是否完成、等待计算完后和获取计算结果检索。只有在计算完成后, 才能使用get方法检索结果, 在必要时阻塞直到它准备好。通过执行cancel方法取消。提供了额外的方法来确定任务是正常完成的, 还是被取消的。一旦计算完成, 就不能取消计算。如果为了可取消性而使用Future, 而不提供有用的结果, 那么你可以声明格式类型为Future<?>, 并且返回null作为底层任务的结果。
+
+使用案例(注意如下的类都是虚构的)
+  
+interface ArchiveSearcher {
+  String search(String target); 
+}
+
+class App {
+  ExecutorService executor = ...
+  ArchiveSearcher searcher = ...
+  void showSearch(final String target) throws InterruptedException {
+    Future<String> future = executor.submit(new Callable<String>() {
+      public String call() {
+        return searcher.search(target);
+      }
+    });
+    displayOtherThings(); // do other things while searching
+    try {
+      displayText(future.get()); // use future
+    } catch (ExecutionException ex) { 
+      cleanup(); 
+      return; 
+    }
+  }
+}
+
+FutureTask类是Future实现了Runnable的一种实现, 且可以被执行器执行。例如, 上面提交的构造器可以被替换为:
+
+FutureTask<String> future = new FutureTask<String>(new Callable<String>() {
+  public String call() {
+    return searcher.search(target);
+  }
+});
+executor.execute(future);
+
+内存一致性影响: 异步计算所采取的操作发生在另一个线程中相应Future.get()之后的操作之前。
+
+
+---------------------------------------------------- Method
+
+############################################## boolean cancel(boolean mayInterruptIfRunning);
+尝试取消这个任务的运行。这个尝试将会失败, 如果这个任务已经完成、已经被取消或者因为某些原因无法被取消。如果成功, 并且调用cancel时这个任务还没有开始, 那么这个任务将不会运行。如果任务已经启动, 那么由mayInterruptIfRunning参数来决定, 执行这个任务的线程是否应该被中断, 来尝试停止任务。
+当前方法返回后, 随后调用isDone将总是返回真。如果这个方法返回真, 那么随后的isCancelled调用将总是返回真。
+
+############################################## boolean isCancelled();
+返回真, 如果这个任务在正常完成前被取消了。
+
+
+############################################## boolean isDone();
+如果这个任务完成就返回真。计算可以因为正常的暂停、异常或者取消 -- 所有这些可能性, 这个方法将返回真。
+
+
+############################################## V get() throws InterruptedException, ExecutionException;
+如有必要, 等到计算完成, 然后获取计算结果。
+返回计算结果。
+
+
+############################################## V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException;
+如有必要, 为计算完成等待最多的给定的时间, 然后获取计算结果, 如果可获取。
+返回计算结果。
+

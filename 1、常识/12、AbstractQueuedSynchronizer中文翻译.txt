@@ -1,0 +1,132 @@
+---------------------------------- AbstractQueuedSynchronizer类中文翻译
+
+提供了一个框架来实现阻塞锁, 并实现依赖先进先出(FIFO)等待队列的相关同步器(semaphores, events等)。对于大多数依靠单个原子的int值来表示状态的同步器来说, 这个类被设计为有用基础。子类必须定义用来修改这个状态的受保护方法, 这些方法定义了在获取或释放对象时这种状态的含义。鉴于此, 这个类中的其他方法执行所有排队和阻塞的机制。子类可以维护其他状态字段, 但只有使用了getState、setState和compareAndSetState方法原子修改int值的操作, 才会被同步器跟踪。
+
+子类应该被定义为非公共的、内部帮助类, 用来实现外围类的同步属性。类AbstractQueuedSynchronizer不会实现任何同步接口。相反, 它定义了诸如acquireInterruptibly这样的方法, 具体的锁和相关的同步器可以适当地调用这些方法, 来实现它们的公共方法。
+
+这个类不"理解"这些区别, 除了在机械意义上, 当共享模式获取成功时, 下一个等待线程(如果存在)也必须确定它是否也可以获取。在不同模式下等待的线程, 共享相同的FIFO队列。通常, 实现子类只支持其中一种模式, 但这两种模式都可以发挥作用, 例如在ReadWriteLock中。只支持独享模式或仅支持共享模式的子类, 不需要定义支持未使用模式的方法。
+
+这个类定义了一个嵌套的、可以被子类用作Condition实现的AbstractQueuedSynchronizer.ConditionObject类, 为方法isHeldExclusively支持独享模式 报告当前线程同步器是否独占
+
+这个类定义了一个嵌套的AbstractQueuedSynchronizer.ConditionObject类, 可以被支持独占模式的子类当做Condition实现。对于这种模式, 方法isheldexcluvely报告当前线程是否独占同步器, 被当前getState值调用的方法release会完全释放此对象, 并获取这个给定的保存的状态值, 最终将这个对象恢复到它之前获得的状态。否则, 不会有AbstractQueuedSynchronizer方法创建这样的condition, 因此如果不能满足这个约束, 就不要使用它。AbstractQueuedSynchronizer.ConditionObject的行为, 当然取决于自身同步器实现的语义。
+
+这个类为内置队列提供了检查、检测和监视方法, 和condition对象相似的方法。可以根据需要, 使用AbstractQueuedSynchronizer, 导出它们的同步机制到类中。
+
+这个类的序列化器, 只存储底层的、原子的、整数的维护状态, 因此反序列化的对象有空的线程队列。需要序列化的常规子类, 会定义一个readObject方法, 在反序列化时将这个恢复到已知的初始状态。 
+
+----- 用法
+为了将这个类作为同步器的基础使用, 重定义了如下方法, 如果适用的话, 使用getState、setState和/或compareAndSetState检查和/或修改同步状态: 
+    1、tryAcquire
+    2、tryRelease
+    3、tryAcquireShared
+    4、tryReleaseShared
+    5、isHeldExclusively
+
+这些方法默认都会抛出UnsupportedOperationException。这些方法的实现必须是内部的、线程安全的, 而且通常情况下应该简短且不堵塞。定义这些方法, 是使用该类的唯一受支持的方法。所有其他方法都被声明为final的, 因为它们不能是独立地改变。
+
+你也会从AbstractOwnableSynchronizer的继承方法中发现, 保持对拥有独立同步器的线程进行跟踪是有用的。鼓励使用 ---- 这使得监控和诊断工具, 可以帮助用户确定哪个线程持有锁。
+
+尽管这个类以内部的FIFO队列为基础, 但它不会自动执行FIFO获取规则。独占同步器的核心遵从如下格式:
+    Acquire:
+        while (!tryAcquire(arg)) {
+            enqueue thread if it is not already queued;
+            possibly block current thread;
+        }
+
+    Release:
+        if (tryRelease(arg))
+            unblock the first queued thread;
+
+(共享模式类似, 但可以涉及级联信号。)
+
+因为获取中的检查在排队之前调用, 所以新的获取线程可能在其他堵塞和排队线程之前插入。但是, 如果需要, 可以定义tryAcquire和/或tryAcquireShared, 通过内部调用一个或多个检查方法使插入不可用, 从而提供一个公平的FIFO获取顺序。特别是, 大多数公平同步器可以定义tryAcquire在hasQueuedPredecessors(一个特别设计、用于公平同步器的方法)返回真时返回假。其他变化也是可能的。
+
+对于默认的barging(也称为贪婪、放弃和回避)策略, 吞吐量和伸缩性通常是最高级别。虽然不能保证公平和不挨饿, 但较早排队的线程允许在较晚排队的线程之前重新竞争。并且每一次重新竞争都有公平的机会成功战胜进入线程。同时, 尽管获取在常规情况上不会旋转, 但它们可能在堵塞之前, 执行多次带有其他计算的tryAcquire方法。当独占同步器仅被短暂持有时, 这就提供了自旋的大部分好处; 而当它不是时, 也没有大部分的缺点。如果期望如此, 您可以通过前面的调用来获得具有"快速路径"检查的方法来增强这一点; 如果同步器可能没有被争用, 那么可能只会预先检查hasContended 和/或 hasQueuedThreads方法来完成。
+
+这个类为同步器提供了一个有效的、可伸缩的基础, 部分是通过特化它对于同步器的使用范围, 这些同步器依赖于int状态、获取和释放参数、和一个内部的先进先出的等待队列。当这还不够时, 你可以使用原子类、您自己的定制java.util.Queue类和LockSupport阻塞支持从较低级别构建同步器。
+
+使用案例
+下面是一个不可重入的、互斥的锁类, 使用值0表示解锁状态, 1表示加锁状态。虽然不可重入锁并不严格要求记录当前所有者线程, 但这个类这样做是为了更容易监控使用情况。它还支持条件判断, 并公开了一种检测方法:
+ class Mutex implements Lock, java.io.Serializable {
+
+   // Our internal helper class
+   private static class Sync extends AbstractQueuedSynchronizer {
+     // Reports whether in locked state
+     protected boolean isHeldExclusively() {
+       return getState() == 1;
+     }
+
+     // Acquires the lock if state is zero
+     public boolean tryAcquire(int acquires) {
+       assert acquires == 1; // Otherwise unused
+       if (compareAndSetState(0, 1)) {
+         setExclusiveOwnerThread(Thread.currentThread());
+         return true;
+       }
+       return false;
+     }
+
+     // Releases the lock by setting state to zero
+     protected boolean tryRelease(int releases) {
+       assert releases == 1; // Otherwise unused
+       if (getState() == 0) throw new IllegalMonitorStateException();
+       setExclusiveOwnerThread(null);
+       setState(0);
+       return true;
+     }
+
+     // Provides a Condition
+     Condition newCondition() { return new ConditionObject(); }
+
+     // Deserializes properly
+     private void readObject(ObjectInputStream s)
+         throws IOException, ClassNotFoundException {
+       s.defaultReadObject();
+       setState(0); // reset to unlocked state
+     }
+   }
+
+   // The sync object does all the hard work. We just forward to it.
+   private final Sync sync = new Sync();
+
+   public void lock()                { sync.acquire(1); }
+   public boolean tryLock()          { return sync.tryAcquire(1); }
+   public void unlock()              { sync.release(1); }
+   public Condition newCondition()   { return sync.newCondition(); }
+   public boolean isLocked()         { return sync.isHeldExclusively(); }
+   public boolean hasQueuedThreads() { return sync.hasQueuedThreads(); }
+   public void lockInterruptibly() throws InterruptedException {
+     sync.acquireInterruptibly(1);
+   }
+   public boolean tryLock(long timeout, TimeUnit unit)
+       throws InterruptedException {
+     return sync.tryAcquireNanos(1, unit.toNanos(timeout));
+   }
+ }
+
+下面是一个类似于CountDownLatch的latch类, 只是仅仅需要一个单一信号就可以触发。因为latch是非独占的, 所以使用共享的获取和释放方法。
+  
+ class BooleanLatch {
+
+   private static class Sync extends AbstractQueuedSynchronizer {
+     boolean isSignalled() { return getState() != 0; }
+
+     protected int tryAcquireShared(int ignore) {
+       return isSignalled() ? 1 : -1;
+     }
+
+     protected boolean tryReleaseShared(int ignore) {
+       setState(1);
+       return true;
+     }
+   }
+
+   private final Sync sync = new Sync();
+   public boolean isSignalled() { return sync.isSignalled(); }
+   public void signal()         { sync.releaseShared(1); }
+   public void await() throws InterruptedException {
+     sync.acquireSharedInterruptibly(1);
+   }
+ }
+
+

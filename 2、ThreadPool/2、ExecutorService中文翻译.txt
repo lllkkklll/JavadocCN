@@ -1,0 +1,65 @@
+---------------------------- ExecutorService类Javadoc文档翻译
+
+Executor提供了管理终止的方法, 并且可以生成Future来跟踪一个或多个异步任务的进度的方法。
+
+ExecutorService可以被终止, 这样做将会导致它拒绝新任务。提供了两个不同的方法来终止一个ExecutorService。shutdown方法允许之前提交的任务在终止之前执行, 但是shutdownNow方法会阻止等待任务启动, 并且尝试停止当前正在运行的任务。一旦终止, executor不会有任务活跃地执行, 不会有任务等待执行, 并且不会有新的任务可以被提交。无用的ExecutorService应该被终止, 使得资源回收。
+
+方法submit通过创建并返回一个Future, 扩展了基本方法Executor.execute(Runnable), 该Future可用于取消执行和/或等待完成。方法invokeAny和invokeAll执行最常用的批量执行形式, 执行一组任务, 然后等待一个或所有任务完成。(类ExecutorCompletionService可以用于编写这些方法的自定义变体)
+
+Executors类为当下包提供的executor服务, 提供了工厂方法。
+使用案例
+这里有一个网络服务的草图, 其中线程池中的线程为传入的请求提供服务。它使用预配置的Executors.newFixedThreadPool工厂方法: 
+
+ class NetworkService implements Runnable {
+   private final ServerSocket serverSocket;
+   private final ExecutorService pool;
+
+   public NetworkService(int port, int poolSize)
+       throws IOException {
+     serverSocket = new ServerSocket(port);
+     pool = Executors.newFixedThreadPool(poolSize);
+   }
+
+   public void run() { // run the service
+     try {
+       for (;;) {
+         pool.execute(new Handler(serverSocket.accept()));
+       }
+     } catch (IOException ex) {
+       pool.shutdown();
+     }
+   }
+ }
+
+ class Handler implements Runnable {
+   private final Socket socket;
+   Handler(Socket socket) { this.socket = socket; }
+   public void run() {
+     // read and service request on socket
+   }
+ }
+
+下述方法以两阶段终止ExecutorService, 第一阶段调用shutdown来拒绝进入的任务, 然后必要时就调用shutdownNow来取消任何残留的任务: 
+  
+ void shutdownAndAwaitTermination(ExecutorService pool) {
+   // Disable new tasks from being submitted
+   pool.shutdown(); 
+   try {
+     // Wait a while for existing tasks to terminate
+     if (!pool.awaitTermination(60, TimeUnit.SECONDS)) {
+      // Cancel currently executing tasks
+       pool.shutdownNow(); 
+       
+       // Wait a while for tasks to respond to being cancelled
+       if (!pool.awaitTermination(60, TimeUnit.SECONDS))
+           System.err.println("Pool did not terminate");
+     }
+   } catch (InterruptedException ie) {
+     // (Re-)Cancel if current thread also interrupted
+     pool.shutdownNow();
+     // Preserve interrupt status
+     Thread.currentThread().interrupt();
+   }
+ }
+
+内存一致性影响: 在向ExecutorService提交Runnable或Callable任务之前, 线程中的操作发生在该任务执行的任何操作之前, 而该任务执行的任何操作又发生在通过Future.get()检索结果之前。

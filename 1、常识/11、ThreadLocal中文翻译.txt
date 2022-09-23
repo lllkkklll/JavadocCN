@@ -1,0 +1,39 @@
+---------------------------------- ThreadLocal类中文翻译
+
+这个类提供了线程本地变量。这些变量与普通变量的不同之处在于, 每个访问变量的线程(通过它的get或set方法)都有自己的变量, 独立初始化的变量副本。ThreadLocal实例通常是类中希望将状态和线程关联的private static字段, (例如: 用户ID或事务ID)。
+
+例如, 下面的类为每个线程生成了本地的唯一标识。线程第一次调用ThreadId.get()时分配线程id, 并且在后续调用中维持不变。
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class ThreadId {
+    // Atomic integer containing the next thread ID to be assigned
+    private static final AtomicInteger nextId = new AtomicInteger(0);
+
+    // Thread local variable containing each thread's ID
+    private static final ThreadLocal<Integer> threadId =
+        new ThreadLocal<Integer>() {
+            @Override protected Integer initialValue() {
+                return nextId.getAndIncrement();
+        }
+    };
+
+    // Returns the current thread's unique ID, assigning it if necessary
+    public static int get() {
+        return threadId.get();
+    }
+}
+
+只要线程是活的, 并且ThreadLocal实例是可访问的, 每个线程都会隐式地持有对其线程局部变量副本的引用; 在一个线程消失后，它的线程本地实例的所有副本都要接受垃圾收集(除非存在对这些副本的其他引用)。
+
+
+/** ******************************************* 总结 *******************************************************/
+
+ThreadLocal ----> ThreadLocalMap ----> Entry(extends WeakReference<ThreadLocal<?>>) ----> ReferenceQueue
+
+
+Thread -----> ThreadLocal.ThreadLocalMap threadLocals -----> <ThreadLocal, Object>
+
+每个线程中都存在一个线程本地变量, 第一次调用ThreadLocal的get、set和withInitial方法时, 会初始化线程本地的ThreadLocal.ThreadLocalMap threadLocals; get和withInitial方法将调用的ThreadLocal对象和指定的结果值封装成Entry对象存入tables数组中。存入的Entry对象继承于WeakReference(虚引用), 当ThreadLocal变量依然被其他引用, 而线程结束时, 可以gc回收, 避免内存泄露的情况发生。
+
+

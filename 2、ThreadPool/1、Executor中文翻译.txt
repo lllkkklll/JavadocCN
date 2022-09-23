@@ -1,0 +1,57 @@
+---------------------------- Executor类Javadoc文档翻译
+
+一个执行提交的Runnable任务的对象。这个接口提供了一种方式, 解耦任务提交和每个任务将会如何运行的机制, 包含线程使用和调度的细节等等。执行器通常用于替代显示创建线程。例如, 与其为一组任务中的每个任务都调用new Thread(new(RunnableTask())).start(), 不如如下使用: 
+   Executor executor = anExecutor;
+   executor.execute(new RunnableTask1());
+   executor.execute(new RunnableTask2());
+   ...
+
+然而, Executor接口不会严格要求执行器是异步的。最简单的例子, 执行器可以在调用线程中, 立即执行提交的任务: 
+ class DirectExecutor implements Executor {
+   public void execute(Runnable r) {
+     r.run();
+   }
+ }
+
+更加通俗的用法, 任务在一些线程中执行, 而不是在调用线程中。下述执行器为每个任务, 都产生了一个新的线程。
+ class ThreadPerTaskExecutor implements Executor {
+   public void execute(Runnable r) {
+     new Thread(r).start();
+   }
+ }
+
+许多Executor实现, 对任务如何被调度和何时被调度, 施加了某些限制。下述执行器, 将提交任务序列化给第二个执行器, 说明了复合执行程序。
+ class SerialExecutor implements Executor {
+   final Queue<Runnable> tasks = new ArrayDeque<Runnable>();
+   final Executor executor;
+   Runnable active;
+
+   SerialExecutor(Executor executor) {
+     this.executor = executor;
+   }
+
+   public synchronized void execute(final Runnable r) {
+     tasks.offer(new Runnable() {
+       public void run() {
+         try {
+           r.run();
+         } finally {
+           scheduleNext();
+         }
+       }
+     });
+     if (active == null) {
+       scheduleNext();
+     }
+   }
+
+   protected synchronized void scheduleNext() {
+     if ((active = tasks.poll()) != null) {
+       executor.execute(active);
+     }
+   }
+ }
+
+这个包提供的Executor实现, 实现了ExecutorService接口, 一个更广泛的接口。ThreadPoolExecutor类提供了一个可扩展的线程池实现。Executors类为这些执行器, 提供了便捷的工厂方法。
+
+内存一致性影响: 在提交Runnable对象到执行器之前, 线程中的动作发生在它开始执行之前, 也许在另一个线程中执行。

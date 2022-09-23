@@ -1,0 +1,38 @@
+---------------------------------- CompletableFuture类中文翻译
+
+可以显式完成的Future(设置它的值和状态), 可以用作CompletionStage, 支持完成时触发依赖的函数和动作。
+
+当两个或更多线程尝试完成、有异常的完成或取消CompletableFuture时, 只会有一个线程成功。
+
+除了这些和直接操作状态和结果的相关方法, CompletableFuture以如下策略实现了接口CompletionStage: 
+    1、 为非异步方法的依赖完成提供的操作, 可以由完成当前CompletableFuture的线程执行, 也可以由完成方法的任何其他调用者执行。 
+    2、 所有没有显式Executor参数的异步方法都使用ForkJoinPool.commonPool()来执行(除非它不支持至少两个并行级别, 在这种情况下, 创建一个新的Thread来运行每个任务)。为了简化监视、调试和跟踪, 所有生成的异步任务都是标记接口CompletableFuture.AsynchronousCompletionTask的实例。
+    3、 所有CompletionStage方法的实现都独立于其他公共方法, 因此一个方法的行为不会受到子类中其他方法重写的影响。
+
+CompletableFuture同样以如下策略实现了接口Future:
+    1、 由于(不像FutureTask)该类对导致其完成的计算没有直接控制, 因此取消被视为另一种形式的异常完成。方法cancel方法completeExceptionally(new CancellationException())与有相同效果。方法isCompletedExceptionally可以用于确定CompletableFuture是否以任何异常的方式完成。
+    2、 在使用CompletionException异常完成的情况下, 方法get()和get(long, TimeUnit)会抛出一个ExecutionException, 其原因与在对应的CompletionException中持有的相同。为了简化在大多数情况下的使用, 这个类还定义了方法join()和getNow, 而不是在这些情况下直接抛出CompletionException。  
+
+
+/** ******************************** Overview **********************************/
+概览
+
+CompletableFuture可以有依赖的完成操作, 收集在一个连接的堆栈中。通过比较和交换一个结果字段自动完成, 然后放开并运行那些动作。这适用于正常和异常结果、同步和异步操作、二进制触发器和各种形式的完成。
+
+字段result(通过CAS设置)非空表示完成。AltResult用于存放null值作为结果, 同时持有异常。使用单一字段容易检索和触发完成。编码和解码很简单, 但是增加了陷阱和将异常与目标关联的难度。最小简单化依赖(静态的)NIL(用于存放null值) 是唯一带有null异常字段的AltResult, 因此我们不经常需要显示的比较。即使有些泛型转换是未检查的(请参阅SuppressWarnings注释), 它们也被放置在适当的位置。
+
+依赖的动作由Completion对象表示, 它们链接为以"stack"字段为首的Treiber堆栈。每种动作都有Completion类, 分为单输入(UniCompletion)、双输入(BiCompletion)、投影(BiCompletion使用两个输入中的任何一个(而不是两个))、共享(CoCompletion, 由两个源中的第二个使用)、零输入源动作和非阻塞等待的Signallers。类Completion继承了ForkJoinTask, 支持异步执行(不增加空间开销, 因为我们利用它的"标签"方法来维护声明)。它还被声明为Runnable, 允许与任意执行器一起使用。
+
+对每一类CompletionStage的支持依赖于一个单独的类, 以及两个CompletableFuture方法:
+1、 名称X对应功能的Completion类, 以"Uni"、"Bi"或"Or"为前缀。每个类包含用于源、动作和依赖项的字段。它们非常相似, 区别只是在于底层功能形式。我们这样做是为了使用户在常见用法中不会遇到适配器层。我们还包括不对应于用户方法的"接班"类/方法;他们将结果从一个阶段复制到另一个阶段。
+2、 Boolean CompletableFuture method x(...)(例如uniApply)提取所有必要参数来检查动作是否可触发, 然后要么运行动作, 要么通过执行其Completion参数安排异步执行, 如果存在的话。如果方法完成则返回真。
+3、 Completion方法tryFire(int mode)调用与它持有的参数相关联的x方法, 并在成功时清除。mode参数允许tryFire被调用两次(SYNC, 然后ASYNC); 第一个用于在安排执行时筛选和捕捉异常, 第二个用于从任务调用时。(一些类不使用async, 所以采取略有不同的形式。)如果函数已经被另一个线程声明, 那么claim()回调将抑制函数调用。
+4、 CompletableFuture方法xStage(…)被CompletableFuture x的公共方法stage调用。它筛选用户参数, 调用和/或创建stage对象。如果不是异步的且x已经完成, 则操作将立即运行。否则会创建一个Completion c, 推送到x的栈中(除非完成), 并通过c.tryfire启动或触发。这也包括如果x在推送时完成可能的比赛。具有两个输入的类(例如BiApply)在推送操作时, 处理两个输入之间的竞争。第二个completion是指向第一个completion的CoCompletion, 被共享, 所以最多只有一个人执行这个动作。多个参数的方法allOf和anyOf两两执行这个操作, 形成补全树。
+
+注意: 方法的泛型类型参数, 根据this是源、依赖项还是完成项而不同。
+
+方法postComplete在完成时被调用, 除非保证目标不是可观察的(例如: 还没有返回或链接)。多个线程可以调用postComplete, 它原子地弹出每个依赖的操作, 并试图通过方法tryFire在NESTED模式下触发它。触发可以递归传播, 因此NESTED mode返回其完整的依赖项(如果存在), 由调用者进行进一步处理(参见方法postFire)。
+
+阻塞方法get()和join()依赖于唤醒等待线程的Signaller Completions。此机制类似于FutureTask、Phaser和SynchronousQueue中使用的Treiber堆栈等待节点。参阅内部文档, 获取算法细节。
+
+如果没有预防措施, CompletableFutures将会很容易变成垃圾堆积物, 因为Completion链建立, 每个都指向它的源。因此, 我们尽快将字段置空(特别是参见方法Completion.detach)。无论如何, 筛选检查都需要无害地忽略空参数, 这些空参数可能在线程竞争空字段中获得。我们还尝试从堆栈中分离过期的Completions, 这些Completions可能永远不会弹出(参见方法postFire)。Completion的字段不需要声明为final或volatile, 因为它们只在安全发布时对其他线程可见。

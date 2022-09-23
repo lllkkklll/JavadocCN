@@ -1,0 +1,31 @@
+---------------------------------- ReentrantLock类中文翻译
+
+一个可重入的、彼此排斥的锁, 正如使用synchronized方法和表达式, 隐式得访问monitor锁有相同的基础行为和语义, 但拥有扩展的功能。
+
+ReentrantLock被最后成功加锁、但还没有解锁的线程所拥有。当锁没有被其他线程持有时, 线程调用lock方法会成功获取到锁并返回。如果当前已经持有了锁, 那么方法会立即返回。这可以使用isHeldByCurrentThread和getHoldCount方法检查。
+
+这个类的构造方法, 接收一个可选的公平参数。当公平参数被设为true时, 争用情况下, 锁更倾向于授权访问等待最久的线程。否则设为false, 这个锁就不能保证以任一特定的访问顺序。被很多线程访问且使用公平锁的程序, 会比那些使用默认设置的程序, 显示更低的全局吞吐量(就像, 较缓慢; 常常会更缓慢), 但但在获得锁的时间上有较小的差异并且保证不挨饿。不过要注意, 锁的公平性不会保证线程调度的公平性。因此, 当其他活跃线程不在执行且目前没有持有锁时, 使用公平锁的线程中的一个可能会成功获取多次。同样要注意, 不计时间的tryLock()方法不会尊重公平设置。如果锁是可用的, 那么它将会成功获取到锁, 即使其他线程正在等待。
+
+推荐的实际操作是: 总是在lock方法调用后紧跟着一个try块, 最典型的是在before/after结构中。
+
+It is recommended practice to always immediately follow a call to lock with a try block, most typically in a before/after construction such as:
+  
+ class X {
+   private final ReentrantLock lock = new ReentrantLock();
+   // ...
+
+   public void m() {
+     lock.lock();  // block until condition holds
+     try {
+       // ... method body
+     } finally {
+       lock.unlock()
+     }
+   }
+ }
+
+除了实现了Lock接口, 这个类定义了很多public和protected方法, 用于检查锁的状态。这些方法中一部分, 只对仪表化和监控有用。
+
+这个方法的同步和内置的锁行为方式相同: 反序列化的锁处于未锁定状态, 与序列化时的状态无关。
+
+这个锁, 同一线程支持最大2147483647的递归锁。尝试超过这个限制, 会导致加锁方法抛出Error。

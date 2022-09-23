@@ -1,0 +1,54 @@
+---------------------------- Executors类Javadoc文档翻译
+
+Executor的工厂和工具方法, ExecutorService, ScheduledExecutorService, ThreadFactory和Callable类定义在这个包。这个类支持如下种类的方法: 
+    1、创建并返回一个设置了常规有用的配置设置的 ExecutorService 的方法;
+    2、创建并返回一个设置了常规有用的配置设置的 ScheduledExecutorService 的方法;
+    3、创建并返回一个包装的ExecutorService的方法, 该方法通过使特定于实现的方法不可用来禁止重配置;
+    4、创建并返回一个ThreadFactory的方法, 该ThreadFactory将新创建的线程设置为一个已知状态;
+    5、从其他类似闭包的表单中创建并返回Callable的方法, 以便在需要Callable的执行方法中使用它们。
+
+********************************** Method *********************************
+
+***************************** ExecutorService newFixedThreadPool(int nThreads)
+创建一个线程池, 该线程池重用在共享的无界队列上操作的固定数量的线程。在任何时候, 最多nThreads的线程将是活跃的处理任务。如果在所有线程活跃时提交额外任务, 那么它们将会在队列中等待直到线程可用。如果有任一线程在shutdown之前因为执行期失败而终止, 如果有需要, 一个新的线程会替换它并执行后续的任务。池内线程会一直存在, 直到显示地shutdown为止。
+
+***************************** ExecutorService newWorkStealingPool(int parallelism)
+创建一个维护了足够线程的线程池, 来支持给定的并发级别, 并且可以使用多个队列来减少竞争。并行级别对应于积极参与或可参与任务处理的最大线程数。
+
+创建一个线程池，该线程池维护足够的线程来支持给定的并行级别，并可以使用多个队列来减少争用。并行级别对应于积极参与或可参与任务处理的最大线程数。线程的实际数量可能会动态地增加和减少。工作窃取池不能保证提交任务的执行顺序。
+
+***************************** ExecutorService newWorkStealingPool()
+创建一个工作偷取的线程池, 使用所有可用的处理器作为它目标的并发级别。
+
+***************************** ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory)
+创建一个线程池, 该线程池重用在共享的无界队列上操作的固定数量的线程, 当需要时使用提供的ThreadFactory来创建新的线程。在任何时候, 最多nThreads的线程将是活跃的处理任务。如果在所有线程活跃时提交额外任务, 那么它们将会在队列中等待直到线程可用。如果有任一线程在shutdown之前因为执行期失败而终止, 如果有需要, 一个新的线程会替换它并执行后续的任务。池内线程会一直存在, 直到显示地shutdown为止。
+
+***************************** ExecutorService newSingleThreadExecutor()
+创建一个Executor, 该Executor使用从无界队列上操作的单一的工作线程。(请注意, 如果这个单一线程在shutdown之前由于运行期失败而终止, 如果需要一个新的线程会替换它执行后续任务。)任务被保证顺序执行, 并且在任何给定时间都不会有超过一个任务是活跃的。与等效的newFixedThreadPool(1)不同, 返回的执行器不保证可以使用额外的线程重配置。
+
+***************************** ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory)
+创建一个Executor, 该Executor使用从无界队列上操作的单一的工作线程, 并且当需要时使用提供的线程工厂来创建新的线程。与等效的newFixedThreadPool(1, threadFactory)不同, 返回的执行器保证不能被重新配置以使用额外的线程。
+
+***************************** ExecutorService newCachedThreadPool()
+创新一个线程池, 该线程池需要时创建新的线程, 但之前构建的线程是可用时会重新使用。这个池典型地说, 将会提高那些执行许多短时间存活的异步任务程序的性能。如果可用, 那么execute调用将会重用之前构建的线程。如果没有存在线程可用, 一个新的线程将会被创建并添加到池中。已经使用60秒的线程会被终止并且从缓存中清除。因此, 保持足够久空闲的池不会消费任何资源。注意, 有相似参数但不同细节的池(如: timeout参数), 会使用ThreadPoolExecutor构造方法创建。
+
+***************************** ExecutorService newCachedThreadPool(ThreadFactory threadFactory)
+创建一个线程池, 该线程池需要时创建新的线程, 但之前构建的线程是可用时会重新使用, 并且使用受保护的ThreadFactory在需要时创建新的线程。
+
+***************************** ScheduledExecutorService newSingleThreadScheduledExecutor()
+创建一个单一线程的执行器, 这个执行器可以调度命令在一个给定的延迟时间后执行, 或定期执行。(但是要注意, 如果这个单一线程在池关闭前因为执行期的失败而终止, 那么如果需要一个新的线程将会替代它来执行后续的任务。) 任务保证是循序执行的, 并且在任何给定时间内, 只会有一个活跃任务。与等效的newScheduledThreadPool(1)不同, 返回的executor保证不能被重新配置以使用额外的线程。
+
+***************************** ScheduledExecutorService newSingleThreadScheduledExecutor(ThreadFactory threadFactory)
+创建一个单一线程的执行器, 这个执行器可以调度命令在一个给定的延迟时间后执行, 或定期执行。(但是要注意, 如果这个单一线程在池关闭前因为执行期的失败而终止, 那么如果需要一个新的线程将会替代它来执行后续的任务。) 任务保证是循序执行的, 并且在任何给定时间内, 只会有一个活跃任务。与等效的newScheduledThreadPool(1, threadFactory)不同, 返回的executor保证不能被重新配置以使用额外的线程。
+
+***************************** ScheduledExecutorService newScheduledThreadPool(int corePoolSize)
+创建一个线程池, 这个线程池可以在给定的延迟时间后调度命令, 或者定期执行。
+
+***************************** ScheduledExecutorService newScheduledThreadPool(int corePoolSize, ThreadFactory threadFactory)
+创建一个线程池, 这个线程池可以在给定的延迟时间后调度命令, 或者定期执行。
+
+***************************** ExecutorService unconfigurableExecutorService(ExecutorService executor)
+返回一个对象, 该对象将所有定义的ExecutorService方法委托给指定的executor, 但任何其他方法不可以使用强制转换来访问。这提供了一种安全"冻结"配置的方法, 并禁止对给定的具体实现进行调优。
+
+***************************** ScheduledExecutorService unconfigurableScheduledExecutorService(ScheduledExecutorService executor)
+返回一个对象, 该对象将所有定义的ExecutorService方法委托给指定的executor, 但任何其他方法不可以使用强制转换来访问。这提供了一种安全"冻结"配置的方法, 并禁止对给定的具体实现进行调优。
