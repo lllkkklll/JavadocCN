@@ -1,3 +1,3 @@
 # JavadocCN
 
-简单Java 文档翻译
+简单 Java 文档翻译
